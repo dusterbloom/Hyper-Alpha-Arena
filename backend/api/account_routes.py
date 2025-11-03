@@ -931,6 +931,14 @@ async def permanently_delete_account(account_id: int, db: Session = Depends(get_
 
         logger.info(f"Account {account_id} ({account_name}) permanently deleted")
         return {"message": f"Account '{account_name}' permanently deleted"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to permanently delete account {account_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to permanently delete account: {str(e)}")
+
+
 @router.post("/{account_id}/trigger-ai-trade")
 async def trigger_ai_trade(
     account_id: int,
