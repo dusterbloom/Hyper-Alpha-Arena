@@ -59,6 +59,10 @@ def seed_prompt_templates(db: Session) -> None:
             if existing.system_template_text != item["template_text"]:
                 existing.system_template_text = item["template_text"]
                 has_changes = True
+            # CRITICAL FIX: Also update template_text (used by AI decision service)
+            if existing.template_text != item["template_text"]:
+                existing.template_text = item["template_text"]
+                has_changes = True
 
             if has_changes:
                 existing.updated_by = SYSTEM_USER

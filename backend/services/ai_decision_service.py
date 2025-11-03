@@ -119,7 +119,7 @@ def _calculate_total_return_percent(account: Account) -> str:
 
 
 def _build_holdings_detail(positions: Dict[str, Dict[str, Any]]) -> str:
-    """Build detailed holdings list for Alpha Arena style prompts"""
+    """Build detailed holdings list for Alpha Arena style prompts with P&L metrics"""
     if not positions:
         return "- None (all cash)"
 
@@ -127,11 +127,20 @@ def _build_holdings_detail(positions: Dict[str, Dict[str, Any]]) -> str:
     for symbol, data in positions.items():
         qty = data.get('quantity', 0)
         avg_cost = data.get('avg_cost', 0)
+        current_price = data.get('current_price', avg_cost)
         current_value = data.get('current_value', 0)
+        cost_basis = data.get('cost_basis', 0)
+        pnl_usd = data.get('unrealized_pnl', 0)
+        pnl_pct = data.get('unrealized_pnl_pct', 0)
+
+        # Format P&L with color indicators for readability
+        pnl_sign = "+" if pnl_pct >= 0 else ""
 
         lines.append(
-            f"- {symbol}: {_format_quantity(qty)} units @ ${_format_currency(avg_cost, precision=4)} avg "
-            f"(current value: ${_format_currency(current_value)})"
+            f"- {symbol}: {_format_quantity(qty)} units @ ${_format_currency(avg_cost, precision=4)} avg | "
+            f"Current: ${_format_currency(current_price, precision=4)} | "
+            f"Value: ${_format_currency(current_value)} (cost: ${_format_currency(cost_basis)}) | "
+            f"P&L: {pnl_sign}{pnl_pct:.2f}% (${pnl_sign}{pnl_usd:.2f})"
         )
 
     return "\n".join(lines)
@@ -151,6 +160,7 @@ def _build_market_prices(prices: Dict[str, float]) -> str:
 
 
 def _build_account_state(portfolio: Dict[str, Any]) -> str:
+    """Build account state for DEFAULT_PROMPT template with P&L metrics"""
     positions: Dict[str, Dict[str, Any]] = portfolio.get("positions", {})
     lines = [
         f"Available Cash (USD): {_format_currency(portfolio.get('cash'))}",
@@ -162,10 +172,16 @@ def _build_account_state(portfolio: Dict[str, Any]) -> str:
 
     if positions:
         for symbol, data in positions.items():
+            pnl_pct = data.get('unrealized_pnl_pct', 0)
+            pnl_usd = data.get('unrealized_pnl', 0)
+            pnl_sign = "+" if pnl_pct >= 0 else ""
+
             lines.append(
                 f"- {symbol}: qty={_format_quantity(data.get('quantity'))}, "
-                f"avg_cost={_format_currency(data.get('avg_cost'))}, "
-                f"current_value={_format_currency(data.get('current_value'))}"
+                f"avg_cost=${_format_currency(data.get('avg_cost'), precision=4)}, "
+                f"current_price=${_format_currency(data.get('current_price', 0), precision=4)}, "
+                f"current_value=${_format_currency(data.get('current_value'))}, "
+                f"pnl={pnl_sign}{pnl_pct:.2f}% (${pnl_sign}{pnl_usd:.2f})"
             )
     else:
         lines.append("- None")
@@ -305,6 +321,153 @@ DECISION_TASK_TEXT = (
 )
 
 
+def _build_technical_indicators_section(indicators_data: Optional[Dict[str, Dict[str, Any]]]) -> str:
+    """
+    Format technical indicators for AI prompt.
+
+    Args:
+        indicators_data: Dictionary mapping symbol to indicator data
+                        e.g., {'BTC': {rsi_14: 87.3, ema_trend: 'STRONG UPTREND', ...}, ...}
+
+    Returns:
+        Formatted string with technical indicators and interpretations
+    """
+    if not indicators_data:
+        return "Technical indicators: Not available (insufficient historical data)"
+
+    sections = []
+
+    for symbol, data in indicators_data.items():
+        if not data:
+            sections.append(f"{symbol}: Technical indicators unavailable")
+            continue
+
+        lines = [
+            f"{symbol} Technical Analysis (Timeframe: {data.get('timeframe', '15m')})",
+            f"Current Price: ${data.get('current_price', 0):,.2f}",
+            "",
+            "📊 Momentum Indicators:",
+        ]
+
+        # RSI
+        rsi = data.get('rsi_14')
+        rsi_signal = data.get('rsi_signal', 'N/A')
+        if rsi is not None:
+            lines.append(f"  • RSI(14): {rsi:.1f} → {rsi_signal}")
+        else:
+            lines.append(f"  • RSI(14): N/A")
+
+        lines.append("")
+        lines.append("📈 Trend Indicators:")
+
+        # EMAs
+        ema20 = data.get('ema_20')
+        ema50 = data.get('ema_50')
+        ema100 = data.get('ema_100')
+
+        if ema20 is not None:
+            lines.append(f"  • EMA(20): ${ema20:,.2f}")
+        if ema50 is not None:
+            lines.append(f"  • EMA(50): ${ema50:,.2f}")
+        if ema100 is not None:
+            lines.append(f"  • EMA(100): ${ema100:,.2f}")
+
+        ema_trend = data.get('ema_trend', 'N/A')
+        lines.append(f"  • Trend: {ema_trend}")
+
+        lines.append("")
+        lines.append("💹 Volatility Indicators:")
+
+        # Bollinger Bands
+        bb_upper = data.get('bb_upper')
+        bb_middle = data.get('bb_middle')
+        bb_lower = data.get('bb_lower')
+        bb_signal = data.get('bb_signal', 'N/A')
+        bb_width = data.get('bb_width_pct')
+
+        if bb_upper is not None and bb_middle is not None and bb_lower is not None:
+            lines.append(f"  • Bollinger Bands: ${bb_lower:,.2f} / ${bb_middle:,.2f} / ${bb_upper:,.2f}")
+            if bb_width is not None:
+                lines.append(f"  • Band Width: {bb_width:.1f}% (volatility measure)")
+            lines.append(f"  • Position: {bb_signal}")
+        else:
+            lines.append(f"  • Bollinger Bands: N/A")
+
+        # ATR
+        atr = data.get('atr_14')
+        if atr is not None:
+            lines.append(f"  • ATR(14): ${atr:,.2f} (avg true range)")
+
+        lines.append("")
+        lines.append("📦 Volume Analysis:")
+
+        # Volume
+        volume = data.get('volume')
+        volume_ma = data.get('volume_ma_20')
+        volume_spike = data.get('volume_spike', False)
+
+        if volume is not None:
+            lines.append(f"  • Current Volume: {volume:,.0f}")
+        if volume_ma is not None:
+            lines.append(f"  • Volume MA(20): {volume_ma:,.0f}")
+
+        if volume_spike:
+            lines.append(f"  • ⚠️ VOLUME SPIKE DETECTED (>1.5x average) - Strong move confirmation")
+        else:
+            lines.append(f"  • Volume Status: Normal")
+
+        # Overall signal summary
+        lines.append("")
+        lines.append("🎯 Trading Signal Summary:")
+
+        # Generate overall signal based on indicators
+        signals = []
+        if rsi is not None:
+            if rsi >= 70:
+                signals.append("RSI overbought (consider selling)")
+            elif rsi <= 30:
+                signals.append("RSI oversold (consider buying)")
+
+        if 'UPTREND' in ema_trend.upper():
+            signals.append("EMAs show uptrend (bullish)")
+        elif 'DOWNTREND' in ema_trend.upper():
+            signals.append("EMAs show downtrend (bearish)")
+
+        if 'OVERBOUGHT' in bb_signal.upper() or 'ABOVE UPPER' in bb_signal.upper():
+            signals.append("BB position overbought (reversal risk)")
+        elif 'OVERSOLD' in bb_signal.upper() or 'BELOW LOWER' in bb_signal.upper():
+            signals.append("BB position oversold (bounce potential)")
+
+        if volume_spike:
+            signals.append("Volume confirms current price action")
+
+        if signals:
+            for signal in signals:
+                lines.append(f"  • {signal}")
+        else:
+            lines.append(f"  • Mixed signals - use caution")
+
+        sections.append("\n".join(lines))
+
+    header = [
+        "=" * 80,
+        "TECHNICAL INDICATORS (15-minute timeframe)",
+        "=" * 80,
+        "",
+        "⚠️ HOW TO USE TECHNICAL INDICATORS:",
+        "  • RSI >70 = Overbought (potential reversal down)",
+        "  • RSI <30 = Oversold (potential reversal up)",
+        "  • Price > EMA20 > EMA50 > EMA100 = Strong uptrend",
+        "  • Price < EMA20 < EMA50 < EMA100 = Strong downtrend",
+        "  • Price at upper Bollinger Band = Overextended (take profit)",
+        "  • Price at lower Bollinger Band = Oversold (potential entry)",
+        "  • Volume spike = Confirms price move (not a fakeout)",
+        "",
+    ]
+
+    return "\n".join(header) + "\n\n".join(sections)
+
+
 def _build_prompt_context(
     account: Account,
     portfolio: Dict[str, Any],
@@ -312,6 +475,7 @@ def _build_prompt_context(
     news_section: str,
     samples: Optional[List] = None,
     target_symbol: Optional[str] = None,
+    technical_indicators: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     positions = portfolio.get("positions", {})
     now = datetime.utcnow()
@@ -330,6 +494,9 @@ def _build_prompt_context(
     total_account_value = _format_currency(portfolio.get('total_assets'))
     holdings_detail = _build_holdings_detail(positions)
     market_prices = _build_market_prices(prices)
+
+    # Technical indicators section
+    technical_indicators_section = _build_technical_indicators_section(technical_indicators)
 
     return {
         # Legacy variables (for Default prompt and backward compatibility)
@@ -353,6 +520,8 @@ def _build_prompt_context(
         "total_account_value": total_account_value,
         "holdings_detail": holdings_detail,
         "market_prices": market_prices,
+        # Technical indicators (new Phase 2 enhancement)
+        "technical_indicators": technical_indicators_section,
     }
 
 
@@ -361,22 +530,49 @@ def _is_default_api_key(api_key: str) -> bool:
     return api_key in DEMO_API_KEYS
 
 
-def _get_portfolio_data(db: Session, account: Account) -> Dict:
-    """Get current portfolio positions and values"""
+def _get_portfolio_data(db: Session, account: Account, prices: Optional[Dict[str, float]] = None) -> Dict:
+    """Get current portfolio positions and values with P&L metrics
+
+    Args:
+        db: Database session
+        account: Trading account
+        prices: Optional dict of current market prices {symbol: price}
+
+    Returns:
+        Portfolio dict with positions including P&L metrics
+    """
     positions = db.query(Position).filter(
         Position.account_id == account.id,
         Position.market == "CRYPTO"
     ).all()
-    
+
     portfolio = {}
     for pos in positions:
         if float(pos.quantity) > 0:
+            quantity = float(pos.quantity)
+            avg_cost = float(pos.avg_cost)
+
+            # Get current market price (fallback to avg_cost if not available)
+            current_price = prices.get(pos.symbol, avg_cost) if prices else avg_cost
+
+            # Calculate proper current value using market price
+            current_value = quantity * current_price
+            cost_basis = quantity * avg_cost
+
+            # Calculate P&L metrics
+            unrealized_pnl = current_value - cost_basis
+            unrealized_pnl_pct = ((current_price / avg_cost) - 1) * 100 if avg_cost > 0 else 0
+
             portfolio[pos.symbol] = {
-                "quantity": float(pos.quantity),
-                "avg_cost": float(pos.avg_cost),
-                "current_value": float(pos.quantity) * float(pos.avg_cost)
+                "quantity": quantity,
+                "avg_cost": avg_cost,
+                "current_price": current_price,
+                "current_value": current_value,
+                "cost_basis": cost_basis,
+                "unrealized_pnl": unrealized_pnl,
+                "unrealized_pnl_pct": unrealized_pnl_pct
             }
-    
+
     return {
         "cash": float(account.current_cash),
         "frozen_cash": float(account.frozen_cash),
@@ -504,16 +700,53 @@ def call_ai_for_decision(
             logger.error("Prompt template resolution failed: %s", exc)
             return None
 
+    # Fetch technical indicators for relevant symbols
+    technical_indicators = {}
+    try:
+        from services.technical_indicators import technical_indicator_service
+
+        # Determine which symbols to fetch indicators for
+        symbols_to_analyze = []
+        if symbols:
+            symbols_to_analyze = symbols
+        elif target_symbol:
+            symbols_to_analyze = [target_symbol]
+        else:
+            # No specific symbols, use all available symbols from supported list
+            symbols_to_analyze = list(SUPPORTED_SYMBOLS.keys())
+
+        # Fetch indicators for each symbol
+        for symbol in symbols_to_analyze:
+            try:
+                indicators = technical_indicator_service.calculate_indicators(symbol)
+                if indicators:
+                    technical_indicators[symbol] = indicators
+                    logger.debug(f"Fetched technical indicators for {symbol}: RSI={indicators.get('rsi_14', 'N/A')}")
+                else:
+                    logger.warning(f"No technical indicators available for {symbol} (insufficient data)")
+            except Exception as indicator_err:
+                logger.warning(f"Failed to fetch technical indicators for {symbol}: {indicator_err}")
+                # Continue with other symbols even if one fails
+
+        if technical_indicators:
+            logger.info(f"Successfully fetched technical indicators for {len(technical_indicators)} symbols")
+        else:
+            logger.warning("No technical indicators available for any symbol")
+
+    except Exception as tech_err:
+        logger.error(f"Error initializing technical indicators service: {tech_err}")
+        technical_indicators = {}  # Continue without indicators
+
     # Build context with multi-symbol support
     if symbols:
         # New multi-symbol approach
         from services.sampling_pool import sampling_pool
         sampling_data = _build_multi_symbol_sampling_data(symbols, sampling_pool)
-        context = _build_prompt_context(account, portfolio, prices, news_section, None, None)
+        context = _build_prompt_context(account, portfolio, prices, news_section, None, None, technical_indicators)
         context["sampling_data"] = sampling_data
     else:
         # Legacy single-symbol approach (backward compatibility)
-        context = _build_prompt_context(account, portfolio, prices, news_section, samples, target_symbol)
+        context = _build_prompt_context(account, portfolio, prices, news_section, samples, target_symbol, technical_indicators)
 
     try:
         prompt = template.template_text.format_map(SafeDict(context))
