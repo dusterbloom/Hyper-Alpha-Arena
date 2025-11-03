@@ -60,6 +60,9 @@ class Account(Base):
     api_wallet_address = Column(String(100), nullable=True)  # API wallet address (delegated for trading)
     api_wallet_registered_at = Column(TIMESTAMP, nullable=True)  # When API wallet was registered
 
+    # Wallet Private Key (Phase 3: KISS Wallet Integration)
+    wallet_private_key_encrypted = Column(String(500), nullable=True)  # Encrypted private key for automated trading
+
     # Trading Account Balances (USD for CRYPTO market)
     initial_capital = Column(DECIMAL(18, 2), nullable=False, default=10000.00)
     current_cash = Column(DECIMAL(18, 2), nullable=False, default=10000.00)

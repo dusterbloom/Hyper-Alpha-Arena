@@ -17,6 +17,8 @@ from services.ai_decision_service import build_chat_completion_endpoints, _extra
 from schemas.account import StrategyConfig, StrategyConfigUpdate
 from repositories.strategy_repo import get_strategy_by_account, upsert_strategy
 from services.trading_strategy import strategy_manager
+from utils.encryption import encrypt_private_key
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +43,15 @@ def _normalize_bool(value, default=True) -> bool:
     if isinstance(value, str):
         return value.strip().lower() in {"true", "1", "yes", "y", "on"}
     return bool(value)
+
+
+def _is_valid_ethereum_address(address: str) -> bool:
+    """Validate Ethereum address format."""
+    if not address:
+        return False
+    # Must start with 0x and have 40 hexadecimal characters
+    pattern = r'^0x[a-fA-F0-9]{40}$'
+    return bool(re.match(pattern, address))
 
 
 def _serialize_strategy(account: Account, strategy) -> StrategyConfig:
@@ -422,7 +433,42 @@ async def update_account_settings(account_id: int, payload: dict, db: Session = 
             auto_trading_enabled = _normalize_bool(payload.get("auto_trading_enabled"))
             account.auto_trading_enabled = "true" if auto_trading_enabled else "false"
             logger.info(f"Updated auto_trading_enabled to: {account.auto_trading_enabled}")
-        
+
+        # Handle wallet address (Phase 3: KISS Wallet Integration)
+        if "wallet_address" in payload:
+            wallet_address = payload["wallet_address"]
+            if wallet_address is None or wallet_address == "":
+                # Clear wallet address
+                account.wallet_address = None
+                logger.info("Cleared wallet address")
+            elif _is_valid_ethereum_address(wallet_address):
+                account.wallet_address = wallet_address
+                logger.info(f"Updated wallet_address to: {wallet_address}")
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid Ethereum address format. Must be 0x followed by 40 hexadecimal characters."
+                )
+
+        # Handle wallet private key (Phase 3: KISS Wallet Integration)
+        if "wallet_private_key" in payload:
+            private_key = payload["wallet_private_key"]
+            if private_key is None or private_key == "":
+                # Clear encrypted private key
+                account.wallet_private_key_encrypted = None
+                logger.info("Cleared wallet private key")
+            else:
+                # Validate private key format (0x + 64 hex characters)
+                if not re.match(r'^0x[a-fA-F0-9]{64}$', private_key):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Invalid private key format. Must be 0x followed by 64 hexadecimal characters."
+                    )
+                # Encrypt and store
+                encrypted_key = encrypt_private_key(private_key)
+                account.wallet_private_key_encrypted = encrypted_key
+                logger.info("Updated encrypted wallet private key")
+
         db.commit()
         db.refresh(account)
         logger.info(f"Account {account_id} updated successfully")
@@ -458,7 +504,8 @@ async def update_account_settings(account_id: int, payload: dict, db: Session = 
             "base_url": account.base_url,
             "api_key": account.api_key,
             "is_active": account.is_active == "true",
-            "auto_trading_enabled": account.auto_trading_enabled == "true"
+            "auto_trading_enabled": account.auto_trading_enabled == "true",
+            "wallet_address": account.wallet_address  # Phase 3: Return wallet address (NOT private key!)
         }
     except HTTPException:
         raise
