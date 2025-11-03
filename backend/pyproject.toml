@@ -13,9 +13,13 @@ dependencies = [
     "requests>=2.31.0",
     "apscheduler>=3.10.0",
     "pandas>=2.3.3",
+    "pandas-ta>=0.3.14b0",
     "ccxt>=4.0.0",
     "pydantic>=2.5.0",
     "pydantic-core>=2.14.0",
+    "hyperliquid-python-sdk>=0.20.0",
+    "eth-account>=0.13.7",
+    "cryptography>=46.0.3",
 ]
 
 [tool.uv]
