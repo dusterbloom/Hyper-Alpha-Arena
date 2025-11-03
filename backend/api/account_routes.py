@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 import logging
 
-from database.connection import SessionLocal
+from database.connection import SessionLocal, get_db
 from database.models import Account, Position, Trade, CryptoPrice, AccountAssetSnapshot
 from services.asset_curve_calculator import invalidate_asset_curve_cache
 from services.ai_decision_service import build_chat_completion_endpoints, _extract_text_from_message
@@ -23,14 +23,6 @@ import re
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/account", tags=["account"])
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 def _normalize_bool(value, default=True) -> bool:
