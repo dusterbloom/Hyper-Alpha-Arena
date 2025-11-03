@@ -170,6 +170,8 @@ export interface TradingAccountCreate {
   initial_capital?: number
   account_type?: string
   auto_trading_enabled?: boolean
+  wallet_address?: string
+  wallet_private_key?: string
 }
 
 export interface TradingAccountUpdate {
@@ -178,6 +180,8 @@ export interface TradingAccountUpdate {
   base_url?: string
   api_key?: string
   auto_trading_enabled?: boolean
+  wallet_address?: string
+  wallet_private_key?: string
 }
 
 export type StrategyTriggerMode = 'realtime' | 'interval' | 'tick_batch'

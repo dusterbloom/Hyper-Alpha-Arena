@@ -34,12 +34,15 @@ interface AIAccount extends TradingAccount {
   model?: string
   base_url?: string
   api_key?: string
+  wallet_address?: string
 }
 
 interface AIAccountCreate extends TradingAccountCreate {
   model?: string
   base_url?: string
   api_key?: string
+  wallet_address?: string
+  wallet_private_key?: string
 }
 
 export default function SettingsDialog({ open, onOpenChange, onAccountUpdated, embedded = false }: SettingsDialogProps) {
@@ -60,6 +63,8 @@ export default function SettingsDialog({ open, onOpenChange, onAccountUpdated, e
     base_url: '',
     api_key: 'default-key-please-update-in-settings',
     auto_trading_enabled: true,
+    wallet_address: '',
+    wallet_private_key: '',
   })
   const [editAccount, setEditAccount] = useState<AIAccountCreate>({
     name: '',
@@ -67,6 +72,8 @@ export default function SettingsDialog({ open, onOpenChange, onAccountUpdated, e
     base_url: '',
     api_key: 'default-key-please-update-in-settings',
     auto_trading_enabled: true,
+    wallet_address: '',
+    wallet_private_key: '',
   })
 
   const loadAccounts = async () => {
@@ -143,7 +150,7 @@ export default function SettingsDialog({ open, onOpenChange, onAccountUpdated, e
 
       console.log('Creating account with data:', newAccount)
       await createAccount(newAccount)
-      setNewAccount({ name: '', model: '', base_url: '', api_key: 'default-key-please-update-in-settings', auto_trading_enabled: true })
+      setNewAccount({ name: '', model: '', base_url: '', api_key: 'default-key-please-update-in-settings', auto_trading_enabled: true, wallet_address: '', wallet_private_key: '' })
       setShowAddForm(false)
       await loadAccounts()
 
@@ -214,7 +221,7 @@ export default function SettingsDialog({ open, onOpenChange, onAccountUpdated, e
       console.log('Updating account with data:', editAccount)
       await updateAccount(editingId, editAccount)
       setEditingId(null)
-      setEditAccount({ name: '', model: '', base_url: '', api_key: '', auto_trading_enabled: true })
+      setEditAccount({ name: '', model: '', base_url: '', api_key: '', auto_trading_enabled: true, wallet_address: '', wallet_private_key: '' })
       setTestResult(null)
       await loadAccounts()
       
@@ -242,12 +249,14 @@ export default function SettingsDialog({ open, onOpenChange, onAccountUpdated, e
       base_url: account.base_url || '',
       api_key: account.api_key || '',
       auto_trading_enabled: account.auto_trading_enabled ?? true,
+      wallet_address: account.wallet_address || '',
+      wallet_private_key: '',  // Never populate private key for security
     })
   }
 
   const cancelEdit = () => {
     setEditingId(null)
-    setEditAccount({ name: '', model: '', base_url: '', api_key: 'default-key-please-update-in-settings', auto_trading_enabled: true })
+    setEditAccount({ name: '', model: '', base_url: '', api_key: 'default-key-please-update-in-settings', auto_trading_enabled: true, wallet_address: '', wallet_private_key: '' })
     setTestResult(null)
     setError(null)
   }
@@ -394,6 +403,25 @@ export default function SettingsDialog({ open, onOpenChange, onAccountUpdated, e
                         value={newAccount.api_key || ''}
                         onChange={(e) => setNewAccount({ ...newAccount, api_key: e.target.value })}
                       />
+                      <div className="space-y-2 border-t pt-3 mt-2">
+                        <div className="text-sm font-medium text-muted-foreground">Hyperliquid Wallet (Phase 3)</div>
+                        <Input
+                          placeholder="Wallet Address (0x...)"
+                          value={newAccount.wallet_address || ''}
+                          onChange={(e) => setNewAccount({ ...newAccount, wallet_address: e.target.value })}
+                          className="font-mono text-xs"
+                        />
+                        <Input
+                          placeholder="Private Key (0x...) - Optional"
+                          type="password"
+                          value={newAccount.wallet_private_key || ''}
+                          onChange={(e) => setNewAccount({ ...newAccount, wallet_private_key: e.target.value })}
+                          className="font-mono text-xs"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Private key is encrypted and stored securely. Optional - only needed for live trading.
+                        </p>
+                      </div>
                       <label className="flex items-center gap-2 text-sm text-muted-foreground">
                         <input
                           type="checkbox"
@@ -447,6 +475,25 @@ export default function SettingsDialog({ open, onOpenChange, onAccountUpdated, e
                           value={editAccount.api_key || ''}
                           onChange={(e) => setEditAccount({ ...editAccount, api_key: e.target.value })}
                         />
+                        <div className="space-y-2 border-t pt-3 mt-2">
+                          <div className="text-sm font-medium text-muted-foreground">Hyperliquid Wallet (Phase 3)</div>
+                          <Input
+                            placeholder="Wallet Address (0x...)"
+                            value={editAccount.wallet_address || ''}
+                            onChange={(e) => setEditAccount({ ...editAccount, wallet_address: e.target.value })}
+                            className="font-mono text-xs"
+                          />
+                          <Input
+                            placeholder="Private Key (0x...) - Optional"
+                            type="password"
+                            value={editAccount.wallet_private_key || ''}
+                            onChange={(e) => setEditAccount({ ...editAccount, wallet_private_key: e.target.value })}
+                            className="font-mono text-xs"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Private key is encrypted and stored securely. Leave blank to keep existing key.
+                          </p>
+                        </div>
                         <label className="flex items-center gap-2 text-sm text-muted-foreground">
                           <input
                             type="checkbox"
